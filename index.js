@@ -1,31 +1,70 @@
+/**
+ *  Primary file for the API
+ * 
+ */
+
+
+// Dependencies
 var http = require('http');
+var https = require('https');
 var url = require('url');
+var fs = require('fs');
+var StringDecoder = require('string_decoder').StringDecoder;
+var config = require('./lib/config');
+var handlers = require('./lib/handlers');
+var helpers = require('./lib/helpers');
+
 
 var server = http.createServer(function(req, res){
 
+    // Get the URL and parse it
     var parsedUrl = url.parse(req.url, true);
 
-    
+    // Get the path
     var path = parsedUrl.pathname;
     var trimmedPath = path.replace(/^\/+|\/+$/g,'');
+
+    // Get the query string as an object
+    var queryStringObject = parsedUrl.query;
+
+    // Get the headers as an object 
     var method = req.method.toLowerCase();
 
-     // Construct the data object to send to the handler
-     var data = {
-        'trimmedPath': trimmedPath,
-        'method': method,
-    };
+    // Get the headers as an object
+    var headers = req.headers;
 
-    var method = req.method.toLowerCase();
 
-    var choosenHandler = typeof(router[trimmedPath]) !== 'undefined' ? router[trimmedPath] : handlers.notFound;
+    // Get the payload, if any
+    var decoder = new StringDecoder('utf-8');
+    var buffer = '';
+    req.on('data', function(data){
+        buffer += decoder.write(data);
+    });
 
-    choosenHandler(data, function(statusCode, payload){
+    req.on('end', function() {
+        buffer += decoder.end();
+
         
+        // Choose the handler this request should go to. If one is not found, use the notFound 
+        var choosenHandler = typeof(router[trimmedPath]) !== 'undefined' ? router[trimmedPath] : handlers.notFound;
+
+
+        // Construct the data object to send to the handler
+         var data = {
+            'trimmedPath': trimmedPath,
+            'queryStringObject': queryStringObject,
+            'method': method,
+            'headers': headers,
+            'payload': helpers.parseJsonToObject(buffer)
+        };
+
+
+        choosenHandler(data, function(statusCode, payload){
+       
 
         statusCode = typeof(statusCode) == 'number' ? statusCode: 200;
 
-        // Use the payload called baack  by the handler, or default
+        // Use the payload called back by the handler, or default
         payload = typeof(payload) == 'object' ? payload : {} ;
 
         // Convert the payload to a string
@@ -37,6 +76,7 @@ var server = http.createServer(function(req, res){
         res.end(payloadString);
 
         console.log('Returning this responce : ', statusCode, payloadString);
+        });
     });
 
 });
@@ -46,18 +86,11 @@ server.listen(3000, function(){
     console.log("The server is listening on port 3000 on localhost");
 });
 
-var handlers = {};
 
-
-handlers.hello = function(data, callback) {
-    callback(200, {message: 'Hello world! Have a nice day!'});
-};
-
-
-handlers.notFound = function(data, callback) {
-    callback(404);
-};
 
 var router = {
-    'route/hello': handlers.hello
+    'ping': handlers.ping,
+    'users': handlers.users,
+    'tokens': handlers.tokens,
+    'checks': handlers.checks
 };
